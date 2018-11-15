@@ -233,6 +233,43 @@ final class UserUtil {
 	}
 	
 	/**
+	 * Masks the given IP address to retain the leading $mask4 / $mask6 bits.
+	 * 
+	 * @param	string		$ip
+	 * @param	int		$mask4
+	 * @param	int		$mask6
+	 * @return	string
+	 */
+	public static function maskIP($ip, $mask4, $mask6) {
+		if ($mask4 < 0 || $mask4 > 32) {
+			throw new \InvalidArgumentException('Given $mask4 is not in the interval [0, 32].');
+		}
+		if ($mask6 < 0 || $mask6 > 128) {
+			throw new \InvalidArgumentException('Given $mask6 is not in the interval [0, 128].');
+		}
+		
+		$ip = self::convertIPv6To4($ip);
+		if (!$ip) {
+			throw new \InvalidArgumentException('Given $ip is not a valid IP address.');
+		}
+		
+		if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false) {
+			$maskBits = $mask6;
+			$bytes = 16;
+		}
+		else {
+			$maskBits = $mask4;
+			$bytes = 4;
+		}
+		$mask = '';
+		for ($i = 0; $i < $bytes; $i++, $maskBits -= 8) {
+			$mask .= chr(0xff << (8 - min(8, $maskBits)));
+		}
+		
+		return inet_ntop(inet_pton($ip) & $mask);
+	}
+	
+	/**
 	 * Returns the request uri of the active request.
 	 * 
 	 * @return	string
