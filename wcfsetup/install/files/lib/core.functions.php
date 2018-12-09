@@ -90,6 +90,97 @@ namespace {
 	}
 }
 
+namespace wcf\functions\deprecated {
+	use \wcf\system\exception\IExtraInformationException;
+
+	function DeprecationError($message, $extraInformation) {
+		// The error needs to be defined lazily, because core.functions.php is initialized before the autoloader is ready.
+		if (!class_exists(DeprecationError::class)) {
+			class DeprecationError extends \Error implements IExtraInformationException {
+				public function __construct($message, $extraInformation) {
+					parent::__construct($message);
+					$this->extraInformation = $extraInformation;
+				}
+				
+				public function getExtraInformation() {
+					return $this->extraInformation;
+				}
+			}
+		}
+		
+		return new DeprecationError($message, $extraInformation);
+	}
+	
+	function feature($message, $extraInformation) {
+		if (!ENABLE_DEPRECATION_WARNINGS) return;
+		
+		throw DeprecationError("A deprecated feature is used, while 'ENABLE_DEPRECATION_WARNINGS' is enabled: ".$message, $extraInformation);
+	}
+	
+	/**
+	 * Sends a deprecation warning for the given class when the returned
+	 * object is destructed.
+	 * 
+	 * Usage:
+	 * 
+	 * $_ = \wcf\functions\deprecated\_class(Foo::class);
+	 * class Foo { ... }
+	 * 
+	 * @param	string	$className
+	 * @return	object
+	 */
+	function _class($className) {
+		if (!ENABLE_DEPRECATION_WARNINGS) return;
+
+		return new class($className) {
+			public function __construct($className) {
+				$this->className = $className;
+			}
+			
+			public function __destruct() {
+				$reflection = new \ReflectionClass($this->className);
+				$comment = $reflection->getDocComment();
+				$matches = null;
+				preg_match('~@deprecated\s+(.*)~', $comment, $matches);
+				
+				$name = $reflection->name;
+				\wcf\functions\deprecated\feature("The class '".$name."' is deprecated.", [
+					['Deprecated Class', $name],
+					['Deprecation Annotation', $matches[1] ?? 'No details are given'],
+				]);
+			}
+		};
+	}
+	
+	/**
+	 * Sends a deprecation warning for the given method.
+	 * 
+	 * Usage:
+	 * 
+	 * public function foo() {
+	 *  \wcf\functions\deprecated\_method(__CLASS__, __FUNCTION__);
+	 *  ...
+	 * }
+	 * 
+	 * @param	string	$className
+	 * @param	string	$method
+	 */
+	function _method($className, $method) {
+		if (!ENABLE_DEPRECATION_WARNINGS) return;
+
+		$reflection = new \ReflectionMethod($className, $method);
+		$comment = $reflection->getDocComment();
+		$matches = null;
+		preg_match('~@deprecated\s+(.*)~', $comment, $matches);
+		
+		$name = $reflection->class."::".$reflection->name;
+		\wcf\functions\deprecated\feature("The method '".$name."' is deprecated.", [
+			['Deprecated Method', $name],
+			['Deprecation Annotation', $matches[1] ?? 'No details are given'],
+		]);
+	}
+}
+
 // @codingStandardsIgnoreStart
 namespace wcf\functions\exception {
 	use wcf\system\WCF;
